@@ -1,0 +1,12 @@
+# Minimal BBMD Configuration
+# This is the simplest possible configuration to get started
+# Run with: ace-acl-bbmd --config minimal_config.yaml
+
+# Required: BBMD network address
+bbmd_address: "0.0.0.0:47808"
+
+# That's it! Everything else has sensible defaults:
+# - No ACL rules (default allow-all policy)
+# - No metrics collection
+# - Console logging only
+# - Standard BACnet settings

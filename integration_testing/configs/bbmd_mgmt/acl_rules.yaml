@@ -1,0 +1,40 @@
+# ACL Rules for Management BBMD
+# Minimal restrictions - management has full access
+
+default_action: allow
+log_default: false
+
+# Cut-through for management network
+enable_cut_through: true
+cut_through_networks:
+  - "192.168.100.0/24"
+  - "172.20.0.0/24"  # Backbone network
+
+rules:
+  # Log all write operations for audit trail
+  - name: "audit_writes"
+    action: allow_log
+    priority: 10
+    message_types:
+      - write_property
+      - write_property_multiple
+      - write_bdt
+    log_matches: true
+    enabled: true
+
+  # Log foreign device registrations
+  - name: "log_foreign_devices"
+    action: allow_log
+    priority: 20
+    message_types:
+      - register_foreign_device
+    log_matches: true
+    enabled: true
+
+  # Allow everything else without logging
+  - name: "allow_all"
+    action: allow
+    priority: 100
+    message_types: [all]
+    log_matches: false
+    enabled: true

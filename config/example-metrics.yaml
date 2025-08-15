@@ -1,0 +1,96 @@
+# Example BBMD Configuration with Prometheus Metrics
+# This configuration demonstrates all metrics options using prometheus-client
+
+# BBMD Network Settings
+bbmd_address: "0.0.0.0:47808"
+interface: eth0  # Optional: bind to specific interface
+
+# BDT (Broadcast Distribution Table) - peer BBMDs
+bdt_entries:
+  - "192.168.2.10:47808"
+  - "192.168.3.10:47808"
+
+# Foreign Device Settings
+accept_foreign_devices: true
+max_foreign_devices: 100
+
+# Prometheus Metrics Configuration
+enable_metrics: true
+
+# Option 1: HTTP Metrics Endpoint (Prometheus scraping)
+# When enabled, Prometheus can scrape metrics from http://localhost:9090/metrics
+metrics_http_enabled: true
+metrics_http_port: 9090
+
+# Option 2: File-based Metrics Export
+# Exports metrics in Prometheus text format to a file
+# Useful for systems that can't use HTTP scraping
+metrics_file_export_enabled: true
+metrics_file_export_path: "./metrics/bbmd_metrics.prom"
+metrics_file_export_interval: 60  # Export every 60 seconds
+
+# Internal Metrics Settings
+metrics_interval: 60      # How often to collect internal snapshots
+metrics_retention: 3600   # Keep snapshots for 1 hour
+
+# Available Prometheus Metrics:
+# - bacnet_info: BBMD instance information (labels: address, version)
+# - bacnet_packets_total: Total packets by action and rule (Counter)
+# - bacnet_bytes_total: Total bytes processed (Counter) 
+# - bacnet_application_messages_total: Messages by type/service (Counter)
+# - bacnet_processing_duration_seconds: Packet processing time (Histogram)
+# - bacnet_active_foreign_devices: Current foreign device count (Gauge)
+# - bacnet_rule_hit_count: Hit count per ACL rule (Counter)
+
+# ACL configuration
+acl:
+  # Default action for unmatched packets
+  default_action: deny
+  log_default: true
+  
+  # Enable cut-through forwarding optimization
+  enable_cut_through: true
+  cut_through_networks:
+    - "192.168.100.0/24"  # Trusted high-speed network
+  
+  # ACL rules
+  rules:
+    # Allow all local network traffic
+    - name: allow-local-network
+      action: allow
+      priority: 100
+      source_network: "192.168.1.0/24"
+      description: "Allow all traffic from local network"
+    
+    # Allow BACnet discovery messages from anywhere
+    - name: allow-discovery
+      action: allow
+      priority: 90
+      message_types:
+        - who_is
+        - i_am
+      description: "Allow device discovery"
+    
+    # Allow read-only access from monitoring network
+    - name: allow-monitoring-reads
+      action: allow
+      priority: 80
+      source_network: "10.0.100.0/24"
+      message_types:
+        - read_property
+      description: "Allow monitoring network to read properties"
+    
+    # Deny write operations from untrusted networks
+    - name: deny-untrusted-writes
+      action: deny
+      priority: 70
+      source_network: "10.0.0.0/8"
+      message_types:
+        - write_property
+      log_matches: true
+      description: "Block write operations from untrusted networks"
+
+# Logging configuration
+log_level: INFO
+log_file: ./logs/bbmd.log
+log_format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"

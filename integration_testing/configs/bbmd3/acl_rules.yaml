@@ -1,0 +1,77 @@
+# ACL Rules for Monitoring BBMD
+# Read-only access to other networks
+
+default_action: deny
+log_default: true
+
+# Cut-through for local monitoring network
+enable_cut_through: true
+cut_through_networks:
+  - "10.3.0.0/24"
+
+rules:
+  # Allow management network full access
+  - name: "allow_management"
+    action: allow
+    priority: 10
+    source_network: "192.168.100.0/24"
+    message_types: [all]
+    log_matches: false
+    enabled: true
+
+  # Allow local monitoring devices all operations within network
+  - name: "allow_local_monitoring"
+    action: allow
+    priority: 20
+    source_network: "10.3.0.0/24"
+    dest_network: "10.3.0.0/24"
+    message_types: [all]
+    log_matches: false
+    enabled: true
+
+  # Allow monitoring devices to read from all networks
+  - name: "monitoring_read_all"
+    action: allow
+    priority: 30
+    source_network: "10.3.0.0/24"
+    message_types:
+      - who_is
+      - read_property
+      - read_property_multiple
+      - read_bdt
+      - read_fdt
+    log_matches: false
+    enabled: true
+
+  # Deny all write operations from monitoring network
+  - name: "deny_monitoring_writes"
+    action: deny
+    priority: 25
+    source_network: "10.3.0.0/24"
+    message_types:
+      - write_property
+      - write_property_multiple
+    log_matches: true
+    enabled: true
+
+  # Allow other networks to respond to monitoring
+  - name: "allow_responses"
+    action: allow
+    priority: 40
+    dest_network: "10.3.0.0/24"
+    message_types:
+      - i_am
+      - read_property_ack
+      - error
+    log_matches: false
+    enabled: true
+
+  # Allow discovery globally
+  - name: "allow_discovery"
+    action: allow
+    priority: 50
+    message_types:
+      - who_is
+      - i_am
+    log_matches: false
+    enabled: true

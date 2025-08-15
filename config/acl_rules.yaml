@@ -1,0 +1,129 @@
+# Standalone ACL Configuration File
+# Use with: ace-acl-bbmd --config bbmd_config_clean.yaml --acl acl_rules.yaml
+# This file can be modified while BBMD is running - changes are automatically reloaded
+
+# Default action when no rules match
+default_action: deny
+log_default: true
+
+# Performance optimization: skip ACL processing for trusted networks
+enable_cut_through: true
+cut_through_networks:
+  - "192.168.100.0/24"  # Management network - full bypass
+  - "10.1.0.0/16"       # Trusted internal network
+
+# ACL Rules (processed by priority - lower number = higher priority)
+rules:
+  # Critical: Block known malicious devices first
+  - name: "block_blacklisted_devices"
+    action: deny
+    priority: 1
+    source_device: 666666  # Known rogue device
+    log_matches: true
+    enabled: true
+    description: "Emergency block for compromised devices"
+
+  # Allow management network full access (also cut-through eligible)
+  - name: "allow_management_full"
+    action: allow
+    priority: 10
+    source_network: "192.168.100.0/24"
+    message_types: [all]
+    log_matches: false
+    enabled: true
+    description: "Management network has unrestricted access"
+
+  # Allow BACnet discovery globally
+  - name: "allow_global_discovery"
+    action: allow
+    priority: 20
+    message_types:
+      - who_is
+      - i_am
+    log_matches: false
+    enabled: true
+    description: "Allow device discovery for all networks"
+
+  # Allow monitoring network read-only access
+  - name: "allow_monitoring_reads"
+    action: allow
+    priority: 30
+    source_network: "10.3.0.0/24"
+    message_types:
+      - read_property
+      - read_property_multiple
+      - read_bdt
+      - read_fdt
+    log_matches: false
+    enabled: true
+    description: "Monitoring systems can read but not write"
+
+  # Restrict HVAC controllers to specific operations
+  - name: "hvac_controller_policy"
+    action: allow
+    priority: 40
+    source_network: "10.1.10.0/24"  # HVAC controller subnet
+    dest_network: "10.1.20.0/24"    # Building automation subnet
+    message_types:
+      - read_property
+      - write_property
+      - subscribe_cov
+    log_matches: true
+    enabled: true
+    description: "HVAC controllers limited to essential operations"
+
+  # Log all write operations from IoT devices
+  - name: "log_iot_writes"
+    action: allow_log
+    priority: 50
+    source_network: "10.2.0.0/16"
+    message_types:
+      - write_property
+      - write_property_multiple
+    log_matches: true
+    enabled: true
+    description: "Audit trail for IoT device writes"
+
+  # Time-based maintenance window
+  - name: "maintenance_window_access"
+    action: allow
+    priority: 60
+    source_network: "10.4.0.0/24"  # Vendor maintenance network
+    message_types: [all]
+    time_range:
+      start: "02:00"
+      end: "04:00"
+      days: ["sun", "wed"]  # Sunday and Wednesday maintenance
+    log_matches: true
+    enabled: true
+    description: "Vendor access during maintenance windows only"
+
+  # Foreign device registration control
+  - name: "foreign_device_policy"
+    action: allow_log
+    priority: 70
+    message_types:
+      - register_foreign_device
+    log_matches: true
+    enabled: true
+    description: "Log all foreign device registrations"
+
+  # Default internal network communication
+  - name: "allow_internal_default"
+    action: allow
+    priority: 100
+    source_network: "10.0.0.0/8"
+    dest_network: "10.0.0.0/8"
+    message_types: [all]
+    log_matches: false
+    enabled: true
+    description: "Allow internal network communication by default"
+
+  # Catch-all deny rule (optional - default_action already denies)
+  - name: "explicit_deny_all"
+    action: deny
+    priority: 999
+    message_types: [all]
+    log_matches: true
+    enabled: false  # Disabled by default since default_action: deny
+    description: "Explicit deny all - enable for debugging"

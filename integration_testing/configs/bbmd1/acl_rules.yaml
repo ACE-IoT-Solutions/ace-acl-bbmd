@@ -1,0 +1,75 @@
+# ACL Rules for Building 1 BBMD (HVAC Controllers)
+# Allows HVAC controllers to operate with some restrictions
+
+default_action: deny
+log_default: true
+
+# Cut-through for local HVAC network
+enable_cut_through: true
+cut_through_networks:
+  - "10.1.0.0/24"  # Local HVAC network
+
+rules:
+  # Allow management network full access
+  - name: "allow_management"
+    action: allow
+    priority: 10
+    source_network: "192.168.100.0/24"
+    message_types: [all]
+    log_matches: false
+    enabled: true
+
+  # Allow local HVAC controllers all operations
+  - name: "allow_local_hvac"
+    action: allow
+    priority: 20
+    source_network: "10.1.0.0/24"
+    dest_network: "10.1.0.0/24"
+    message_types: [all]
+    log_matches: false
+    enabled: true
+
+  # Allow HVAC controllers to write to Building 2 IoT devices
+  - name: "hvac_to_iot_control"
+    action: allow
+    priority: 30
+    source_network: "10.1.0.0/24"
+    dest_network: "10.2.0.0/24"
+    message_types:
+      - read_property
+      - write_property
+      - subscribe_cov
+    log_matches: true
+    enabled: true
+
+  # Allow monitoring network to read from HVAC
+  - name: "monitoring_read_access"
+    action: allow
+    priority: 40
+    source_network: "10.3.0.0/24"
+    message_types:
+      - who_is
+      - read_property
+      - read_property_multiple
+    log_matches: false
+    enabled: true
+
+  # Allow global discovery
+  - name: "allow_discovery"
+    action: allow
+    priority: 50
+    message_types:
+      - who_is
+      - i_am
+    log_matches: false
+    enabled: true
+
+  # Deny IoT devices from writing to HVAC
+  - name: "deny_iot_writes"
+    action: deny
+    priority: 25
+    source_network: "10.2.0.0/24"
+    message_types:
+      - write_property
+    log_matches: true
+    enabled: true

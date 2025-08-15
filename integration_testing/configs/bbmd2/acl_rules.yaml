@@ -1,0 +1,93 @@
+# ACL Rules for Building 2 BBMD (IoT Devices)
+# More restrictive rules for IoT network
+
+default_action: deny
+log_default: true
+
+# No cut-through for IoT network (all packets inspected)
+enable_cut_through: false
+
+rules:
+  # Block rogue device first
+  - name: "block_rogue_device"
+    action: deny
+    priority: 1
+    source_device: 666666
+    message_types: [all]
+    log_matches: true
+    enabled: true
+
+  # Allow management network full access
+  - name: "allow_management"
+    action: allow
+    priority: 10
+    source_network: "192.168.100.0/24"
+    message_types: [all]
+    log_matches: false
+    enabled: true
+
+  # Allow local IoT devices limited operations
+  - name: "allow_local_iot"
+    action: allow
+    priority: 20
+    source_network: "10.2.0.0/24"
+    dest_network: "10.2.0.0/24"
+    message_types:
+      - who_is
+      - i_am
+      - read_property
+    log_matches: false
+    enabled: true
+
+  # Log all IoT write attempts
+  - name: "log_iot_writes"
+    action: allow_log
+    priority: 25
+    source_network: "10.2.0.0/24"
+    message_types:
+      - write_property
+    log_matches: true
+    enabled: true
+
+  # Allow HVAC controllers to control IoT devices
+  - name: "hvac_control_access"
+    action: allow
+    priority: 30
+    source_network: "10.1.0.0/24"
+    dest_network: "10.2.0.0/24"
+    message_types:
+      - read_property
+      - write_property
+    log_matches: true
+    enabled: true
+
+  # Allow monitoring read access
+  - name: "monitoring_read_access"
+    action: allow
+    priority: 40
+    source_network: "10.3.0.0/24"
+    message_types:
+      - who_is
+      - read_property
+    log_matches: false
+    enabled: true
+
+  # Allow discovery messages
+  - name: "allow_discovery"
+    action: allow
+    priority: 50
+    message_types:
+      - who_is
+      - i_am
+    log_matches: false
+    enabled: true
+
+  # Deny all other writes
+  - name: "deny_external_writes"
+    action: deny
+    priority: 60
+    message_types:
+      - write_property
+      - write_property_multiple
+    log_matches: true
+    enabled: true

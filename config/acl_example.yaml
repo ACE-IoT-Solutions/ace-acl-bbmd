@@ -1,0 +1,104 @@
+# Example ACL Configuration for BACnet BBMD
+# This configuration demonstrates various ACL rule patterns
+
+# Default action when no rules match (deny, allow, log)
+default_action: deny
+log_default: true
+
+# Performance optimization settings
+enable_cut_through: true
+cut_through_networks:
+  - "10.1.0.0/16"      # Trusted internal network
+  - "192.168.100.0/24" # Management network
+
+# ACL Rules (processed in priority order, lowest number = highest priority)
+rules:
+  # Allow all traffic from management network (cut-through eligible)
+  - name: "allow_management_network"
+    action: allow
+    priority: 10
+    source_network: "192.168.100.0/24"
+    message_types: [all]
+    log_matches: false
+    enabled: true
+
+  # Allow specific BACnet devices to communicate
+  - name: "allow_hvac_controllers"
+    action: allow
+    priority: 20
+    source_network: "10.1.10.0/24"
+    source_device: 12345  # Optional: specific device ID
+    dest_network: "10.1.20.0/24"
+    message_types:
+      - read_property
+      - write_property
+      - who_is
+      - i_am
+    log_matches: true
+    enabled: true
+
+  # Deny all write operations from IoT network
+  - name: "deny_iot_writes"
+    action: deny
+    priority: 30
+    source_network: "10.2.0.0/16"
+    message_types:
+      - write_property
+      - write_bdt
+    log_matches: true
+    enabled: true
+
+  # Allow broadcasts from specific network during business hours
+  - name: "allow_business_hours_broadcast"
+    action: allow
+    priority: 40
+    source_network: "10.1.0.0/16"
+    message_types:
+      - original_broadcast
+      - distribute_broadcast
+    time_range:
+      start: "08:00"
+      end: "18:00"
+      days: ["mon", "tue", "wed", "thu", "fri"]
+    log_matches: false
+    enabled: true
+
+  # Log all foreign device registrations
+  - name: "log_foreign_registrations"
+    action: allow_log
+    priority: 50
+    message_types:
+      - register_foreign_device
+    log_matches: true
+    enabled: true
+
+  # Block specific problematic device
+  - name: "block_rogue_device"
+    action: deny
+    priority: 5  # High priority to block early
+    source_device: 666666
+    log_matches: true
+    enabled: true
+
+  # Allow read operations from monitoring network
+  - name: "allow_monitoring_reads"
+    action: allow
+    priority: 60
+    source_network: "10.3.0.0/24"
+    message_types:
+      - read_property
+      - read_bdt
+      - read_fdt
+      - who_is
+    log_matches: false
+    enabled: true
+
+  # Default allow for internal network (catch-all)
+  - name: "allow_internal_default"
+    action: allow
+    priority: 100
+    source_network: "10.0.0.0/8"
+    dest_network: "10.0.0.0/8"
+    message_types: [all]
+    log_matches: false
+    enabled: true

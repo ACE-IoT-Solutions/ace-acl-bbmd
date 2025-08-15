@@ -1,0 +1,35 @@
+# BBMD Configuration (without ACL rules)
+# Use --acl flag to specify separate ACL configuration file
+
+# BBMD Network Settings
+bbmd_address: "0.0.0.0:47808"
+interface: "eth0"  # Optional: specific network interface
+
+# Broadcast Distribution Table (peer BBMDs)
+bdt_entries:
+  - "192.168.1.101:47808"
+  - "192.168.2.100:47808"
+  - "10.1.1.50:47808"
+
+# Foreign Device Settings
+accept_foreign_devices: true
+max_foreign_devices: 100
+
+# Logging Configuration
+log_level: "INFO"
+log_file: "logs/bbmd.log"
+log_format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+# Metrics Configuration
+enable_metrics: true
+metrics_interval: 60      # Snapshot every 60 seconds
+metrics_retention: 3600   # Keep metrics for 1 hour
+metrics_http_port: 9090
+metrics_http_enabled: true
+metrics_file_export_enabled: false
+metrics_file_export_path: "./metrics/bbmd_metrics.prom"
+metrics_file_export_interval: 60
+
+# Performance Settings
+max_packet_size: 1476
+queue_size: 1000

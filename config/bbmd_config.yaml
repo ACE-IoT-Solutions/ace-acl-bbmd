@@ -1,0 +1,138 @@
+# Complete BBMD Configuration Example
+# This file demonstrates all available configuration options
+
+# BBMD Network Settings
+bbmd_address: "0.0.0.0:47808"
+interface: "eth0"  # Optional: specific network interface
+
+# Broadcast Distribution Table (peer BBMDs)
+bdt_entries:
+  - "192.168.1.101:47808"
+  - "192.168.2.100:47808"
+  - "10.1.1.50:47808"
+
+# Foreign Device Settings
+accept_foreign_devices: true
+max_foreign_devices: 100
+
+# Logging Configuration
+log_level: "INFO"
+log_file: "logs/bbmd.log"
+log_format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+# Metrics Configuration (Prometheus)
+enable_metrics: true
+metrics_interval: 60      # Internal metrics collection interval
+metrics_retention: 3600   # Keep internal snapshots for 1 hour
+
+# Prometheus HTTP endpoint (optional)
+# When enabled, exposes metrics at http://localhost:9090/metrics
+metrics_http_enabled: true
+metrics_http_port: 9090
+
+# File-based metrics export (optional)
+# Exports metrics in Prometheus text format to a file
+metrics_file_export_enabled: true
+metrics_file_export_path: "./metrics/bbmd_metrics.prom"
+metrics_file_export_interval: 60  # Export every 60 seconds
+
+
+# Performance Settings
+max_packet_size: 1476
+queue_size: 1000
+
+# Access Control List Configuration
+acl:
+  # Default action when no rules match
+  default_action: deny
+  log_default: true
+  
+  # Performance optimization
+  enable_cut_through: true
+  cut_through_networks:
+    - "10.1.0.0/16"      # Trusted internal network
+    - "192.168.100.0/24" # Management network
+  
+  # ACL Rules
+  rules:
+    # High priority: Block known bad actors
+    - name: "block_malicious_device"
+      action: deny
+      priority: 1
+      source_device: 999999
+      log_matches: true
+      enabled: true
+    
+    # Allow all from management network (cut-through eligible)
+    - name: "allow_management"
+      action: allow
+      priority: 10
+      source_network: "192.168.100.0/24"
+      message_types: [all]
+      log_matches: false
+      enabled: true
+    
+    # Allow BACnet discovery
+    - name: "allow_discovery"
+      action: allow
+      priority: 20
+      message_types:
+        - who_is
+        - i_am
+      log_matches: false
+      enabled: true
+    
+    # Allow reads from monitoring network
+    - name: "allow_monitoring"
+      action: allow
+      priority: 30
+      source_network: "10.3.0.0/24"
+      message_types:
+        - read_property
+        - read_bdt
+        - read_fdt
+      log_matches: false
+      enabled: true
+    
+    # Restrict writes to specific devices
+    - name: "allow_controller_writes"
+      action: allow
+      priority: 40
+      source_network: "10.1.10.0/24"
+      dest_network: "10.1.20.0/24"
+      message_types:
+        - write_property
+      log_matches: true
+      enabled: true
+    
+    # Time-based rule for maintenance
+    - name: "maintenance_window"
+      action: allow
+      priority: 50
+      source_network: "10.4.0.0/24"
+      message_types: [all]
+      time_range:
+        start: "02:00"
+        end: "04:00"
+        days: ["sun"]
+      log_matches: true
+      enabled: true
+    
+    # Log foreign device registrations
+    - name: "log_foreign_devices"
+      action: allow_log
+      priority: 60
+      message_types:
+        - register_foreign_device
+      log_matches: true
+      enabled: true
+    
+    # Allow internal network communication
+    - name: "allow_internal"
+      action: allow
+      priority: 100
+      source_network: "10.0.0.0/8"
+      dest_network: "10.0.0.0/8"
+      message_types: [all]
+      log_matches: false
+      enabled: true

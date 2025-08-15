@@ -1,0 +1,38 @@
+# Prometheus configuration for BACnet BBMD monitoring
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Management BBMD
+  - job_name: 'bbmd_management'
+    static_configs:
+      - targets: ['bbmd_mgmt:9090']
+        labels:
+          bbmd_name: 'management'
+          network: 'management'
+
+  # Building 1 BBMD
+  - job_name: 'bbmd_building1'
+    static_configs:
+      - targets: ['bbmd1:9090']
+        labels:
+          bbmd_name: 'building1'
+          network: 'hvac'
+
+  # Building 2 BBMD
+  - job_name: 'bbmd_building2'
+    static_configs:
+      - targets: ['bbmd2:9090']
+        labels:
+          bbmd_name: 'building2'
+          network: 'iot'
+
+  # Monitoring BBMD
+  - job_name: 'bbmd_monitoring'
+    static_configs:
+      - targets: ['bbmd3:9090']
+        labels:
+          bbmd_name: 'monitoring'
+          network: 'monitoring'

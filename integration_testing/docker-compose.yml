@@ -1,0 +1,330 @@
+version: '3.8'
+
+# Network topology:
+# - Management Network (192.168.100.0/24) - Full access
+# - Building Network 1 (10.1.0.0/24) - HVAC controllers
+# - Building Network 2 (10.2.0.0/24) - IoT devices  
+# - Monitoring Network (10.3.0.0/24) - Read-only access
+
+networks:
+  management:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.100.0/24
+  
+  building1:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.1.0.0/24
+  
+  building2:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.2.0.0/24
+  
+  monitoring:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.3.0.0/24
+  
+  backbone:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+
+services:
+  # BBMD for Building Network 1
+  bbmd1:
+    build:
+      context: ..
+      dockerfile: integration_testing/Dockerfile.bbmd
+    container_name: bbmd1
+    hostname: bbmd1
+    networks:
+      building1:
+        ipv4_address: 10.1.0.2
+      backbone:
+        ipv4_address: 172.20.0.11
+    ports:
+      - "47811:47808/udp"
+      - "9091:9090"
+    volumes:
+      - ./configs/bbmd1:/app/config:ro
+      - ./logs/bbmd1:/app/logs
+      - ./metrics/bbmd1:/app/metrics
+    environment:
+      - BBMD_NAME=Building1-BBMD
+    restart: unless-stopped
+
+  # BBMD for Building Network 2
+  bbmd2:
+    build:
+      context: ..
+      dockerfile: integration_testing/Dockerfile.bbmd
+    container_name: bbmd2
+    hostname: bbmd2
+    networks:
+      building2:
+        ipv4_address: 10.2.0.2
+      backbone:
+        ipv4_address: 172.20.0.12
+    ports:
+      - "47812:47808/udp"
+      - "9092:9090"
+    volumes:
+      - ./configs/bbmd2:/app/config:ro
+      - ./logs/bbmd2:/app/logs
+      - ./metrics/bbmd2:/app/metrics
+    environment:
+      - BBMD_NAME=Building2-BBMD
+    restart: unless-stopped
+
+  # BBMD for Monitoring Network
+  bbmd3:
+    build:
+      context: ..
+      dockerfile: integration_testing/Dockerfile.bbmd
+    container_name: bbmd3
+    hostname: bbmd3
+    networks:
+      monitoring:
+        ipv4_address: 10.3.0.2
+      backbone:
+        ipv4_address: 172.20.0.13
+    ports:
+      - "47813:47808/udp"
+      - "9093:9090"
+    volumes:
+      - ./configs/bbmd3:/app/config:ro
+      - ./logs/bbmd3:/app/logs
+      - ./metrics/bbmd3:/app/metrics
+    environment:
+      - BBMD_NAME=Monitoring-BBMD
+    restart: unless-stopped
+
+  # Management BBMD (has access to all networks)
+  bbmd_mgmt:
+    build:
+      context: ..
+      dockerfile: integration_testing/Dockerfile.bbmd
+    container_name: bbmd_mgmt
+    hostname: bbmd_mgmt
+    networks:
+      management:
+        ipv4_address: 192.168.100.2
+      backbone:
+        ipv4_address: 172.20.0.10
+    ports:
+      - "47810:47808/udp"
+      - "9090:9090"
+    volumes:
+      - ./configs/bbmd_mgmt:/app/config:ro
+      - ./logs/bbmd_mgmt:/app/logs
+      - ./metrics/bbmd_mgmt:/app/metrics
+    environment:
+      - BBMD_NAME=Management-BBMD
+    restart: unless-stopped
+
+  # HVAC Controllers in Building 1
+  hvac_controller_1:
+    build:
+      context: .
+      dockerfile: Dockerfile.device
+    container_name: hvac_controller_1
+    networks:
+      building1:
+        ipv4_address: 10.1.0.101
+    command: [
+      "python", "/app/bacnet_device_simulator.py",
+      "--device-id", "100101",
+      "--device-name", "HVAC-Controller-1",
+      "--local-address", "10.1.0.101:47808",
+      "--bbmd-address", "10.1.0.2:47808",
+      "--behavior", "controller"
+    ]
+    depends_on:
+      - bbmd1
+
+  hvac_controller_2:
+    build:
+      context: .
+      dockerfile: Dockerfile.device
+    container_name: hvac_controller_2
+    networks:
+      building1:
+        ipv4_address: 10.1.0.102
+    command: [
+      "python", "/app/bacnet_device_simulator.py",
+      "--device-id", "100102",
+      "--device-name", "HVAC-Controller-2",
+      "--local-address", "10.1.0.102:47808",
+      "--bbmd-address", "10.1.0.2:47808",
+      "--behavior", "controller"
+    ]
+    depends_on:
+      - bbmd1
+
+  # IoT Devices in Building 2
+  iot_device_1:
+    build:
+      context: .
+      dockerfile: Dockerfile.device
+    container_name: iot_device_1
+    networks:
+      building2:
+        ipv4_address: 10.2.0.101
+    command: [
+      "python", "/app/bacnet_device_simulator.py",
+      "--device-id", "200101",
+      "--device-name", "IoT-Sensor-1",
+      "--local-address", "10.2.0.101:47808",
+      "--bbmd-address", "10.2.0.2:47808",
+      "--behavior", "normal"
+    ]
+    depends_on:
+      - bbmd2
+
+  iot_device_2:
+    build:
+      context: .
+      dockerfile: Dockerfile.device
+    container_name: iot_device_2
+    networks:
+      building2:
+        ipv4_address: 10.2.0.102
+    command: [
+      "python", "/app/bacnet_device_simulator.py",
+      "--device-id", "200102",
+      "--device-name", "IoT-Sensor-2",
+      "--local-address", "10.2.0.102:47808",
+      "--bbmd-address", "10.2.0.2:47808",
+      "--behavior", "normal"
+    ]
+    depends_on:
+      - bbmd2
+
+  # Monitoring Devices
+  monitor_1:
+    build:
+      context: .
+      dockerfile: Dockerfile.device
+    container_name: monitor_1
+    networks:
+      monitoring:
+        ipv4_address: 10.3.0.101
+    command: [
+      "python", "/app/bacnet_device_simulator.py",
+      "--device-id", "300101",
+      "--device-name", "Monitor-1",
+      "--local-address", "10.3.0.101:47808",
+      "--bbmd-address", "10.3.0.2:47808",
+      "--behavior", "monitor"
+    ]
+    depends_on:
+      - bbmd3
+
+  # Discovery Scanner (in monitoring network)
+  discovery_scanner:
+    build:
+      context: .
+      dockerfile: Dockerfile.device
+    container_name: discovery_scanner
+    networks:
+      monitoring:
+        ipv4_address: 10.3.0.201
+    command: [
+      "python", "/app/bacnet_device_simulator.py",
+      "--device-id", "300201",
+      "--device-name", "Discovery-Scanner",
+      "--local-address", "10.3.0.201:47808",
+      "--bbmd-address", "10.3.0.2:47808",
+      "--behavior", "discovery"
+    ]
+    depends_on:
+      - bbmd3
+
+  # Rogue Device (for testing blocking)
+  rogue_device:
+    build:
+      context: .
+      dockerfile: Dockerfile.device
+    container_name: rogue_device
+    networks:
+      building2:
+        ipv4_address: 10.2.0.66
+    command: [
+      "python", "/app/bacnet_device_simulator.py",
+      "--device-id", "666666",
+      "--device-name", "Rogue-Device",
+      "--local-address", "10.2.0.66:47808",
+      "--bbmd-address", "10.2.0.2:47808",
+      "--behavior", "rogue"
+    ]
+    depends_on:
+      - bbmd2
+
+  # Management Station
+  mgmt_station:
+    build:
+      context: .
+      dockerfile: Dockerfile.device
+    container_name: mgmt_station
+    networks:
+      management:
+        ipv4_address: 192.168.100.101
+    command: [
+      "python", "/app/bacnet_device_simulator.py",
+      "--device-id", "999999",
+      "--device-name", "Management-Station",
+      "--local-address", "192.168.100.101:47808",
+      "--bbmd-address", "192.168.100.2:47808",
+      "--behavior", "controller"
+    ]
+    depends_on:
+      - bbmd_mgmt
+
+  # Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    networks:
+      backbone:
+        ipv4_address: 172.20.0.100
+    ports:
+      - "9099:9090"
+    volumes:
+      - ./configs/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    restart: unless-stopped
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    networks:
+      backbone:
+        ipv4_address: 172.20.0.101
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./configs/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./configs/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+
+volumes:
+  prometheus_data:
+  grafana_data:

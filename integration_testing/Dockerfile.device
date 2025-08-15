@@ -1,0 +1,25 @@
+# Dockerfile for BACnet Device Simulator
+FROM python:3.13-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app directory
+WORKDIR /app
+
+# Install Python dependencies
+RUN pip install --no-cache-dir \
+    bacpypes3>=0.0.102 \
+    asyncio
+
+# Copy simulator script
+COPY devices/bacnet_device_simulator.py /app/
+
+# Make script executable
+RUN chmod +x /app/bacnet_device_simulator.py
+
+# Default command (will be overridden in docker-compose)
+CMD ["python", "/app/bacnet_device_simulator.py"]

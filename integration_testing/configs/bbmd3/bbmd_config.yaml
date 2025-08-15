@@ -1,0 +1,29 @@
+# BBMD Configuration for Monitoring Network
+# This BBMD manages monitoring and discovery devices
+
+bbmd_address: "0.0.0.0:47808"
+interface: "eth0"
+
+# Peer BBMDs on backbone network
+bdt_entries:
+  - "172.20.0.10:47808"  # Management BBMD
+  - "172.20.0.11:47808"  # Building 1 BBMD
+  - "172.20.0.12:47808"  # Building 2 BBMD
+
+# Foreign device support
+accept_foreign_devices: true
+max_foreign_devices: 50
+
+# Logging
+log_level: "INFO"
+log_file: "/app/logs/bbmd3.log"
+log_format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+# Prometheus metrics
+enable_metrics: true
+metrics_interval: 30
+metrics_http_enabled: true
+metrics_http_port: 9090
+metrics_file_export_enabled: true
+metrics_file_export_path: "/app/metrics/bbmd3_metrics.prom"
+metrics_file_export_interval: 60

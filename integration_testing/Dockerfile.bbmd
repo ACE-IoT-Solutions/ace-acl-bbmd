@@ -1,0 +1,28 @@
+# Dockerfile for ACE ACL BBMD
+FROM python:3.13-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app directory
+WORKDIR /app
+
+# Copy project files
+COPY pyproject.toml uv.lock ./
+COPY src/ ./src/
+
+# Install uv and dependencies
+RUN pip install uv && \
+    uv pip install --system -e .
+
+# Create directories for logs and metrics
+RUN mkdir -p /app/logs /app/metrics
+
+# Expose BBMD port and metrics port
+EXPOSE 47808/udp 9090
+
+# Default command
+CMD ["ace-acl-bbmd", "--config", "/app/config/bbmd_config.yaml", "--acl", "/app/config/acl_rules.yaml"]

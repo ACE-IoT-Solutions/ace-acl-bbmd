@@ -1,0 +1,32 @@
+[project]
+name = "ace-acl-bbmd"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Andrew Rodgers", email = "andrew@aceiotsolutions.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "bacpypes3>=0.0.102",
+    "prometheus-client>=0.22.1",
+    "pydantic>=2.0",
+    "pyyaml>=6.0",
+    "tomli>=2.0; python_version < '3.11'",
+    "watchdog>=3.0.0",
+]
+
+[project.scripts]
+ace-acl-bbmd = "ace_acl_bbmd:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pyrefly>=0.27.0",
+    "pytest>=8.4.1",
+    "pytest-asyncio>=1.1.0",
+    "ruff>=0.12.7",
+]
