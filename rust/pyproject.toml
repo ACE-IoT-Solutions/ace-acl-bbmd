@@ -1,0 +1,13 @@
+[project]
+name = "ace-acl-engine"
+version = "0.1.0"
+description = "Rust ACL rules engine for ace-acl-bbmd"
+requires-python = ">=3.13"
+
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+module-name = "ace_acl_engine"

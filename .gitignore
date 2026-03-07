@@ -92,6 +92,11 @@ integration_testing/grafana_data/
 .claude-flow/
 .hive-mind/
 
+# Rust build artifacts
+target/
+rust/target/
+Cargo.lock
+
 # UV package manager
 .venv/
 uv.lock.local

@@ -23,11 +23,18 @@ The ACE ACL BBMD extends the standard BACnet BBMD functionality with powerful ac
 - Default allow/deny policies
 - Time-of-day and day-of-week restrictions
 
+### High-Performance Rust ACL Engine
+- Native Rust rule matching engine via PyO3 for high-throughput packet filtering
+- Full BACnet NPDU/APDU decoding in Rust using [rusty-bacnet](https://github.com/jscott3201/rusty-bacnet) (`bacnet-encoding` crate)
+- Pre-computed u32 bitmask IP/CIDR matching (no per-packet string parsing)
+- **5.3M packets/sec** full pipeline (decode + match) at 100 rules
+- **1,300x faster** than pure-Python rule matching
+- Graceful fallback to Python when the Rust extension is not installed
+
 ### Performance Optimization
 - Cut-through forwarding for trusted networks
 - Configurable packet queues
 - Metrics collection with minimal overhead
-- Caching for frequently accessed rules
 
 ### Monitoring & Metrics
 - Per-device packet counters
@@ -44,12 +51,28 @@ The ACE ACL BBMD extends the standard BACnet BBMD functionality with powerful ac
 git clone https://github.com/ACE-IoT-Solutions/ace-acl-bbmd.git
 cd ace-acl-bbmd
 
-# Install with uv (recommended)
+# Install Python package with uv (recommended)
 uv sync
 
 # Or install with pip
 pip install .
 ```
+
+### Rust ACL Engine (optional, recommended)
+
+The Rust engine is optional but provides ~1,300x faster rule matching. It requires Rust 1.93+ and [maturin](https://www.maturin.rs/).
+
+```bash
+# Install maturin
+uv pip install maturin
+
+# Build and install the Rust extension (release mode)
+cd rust
+maturin develop --release
+cd ..
+```
+
+The Python ACL engine will automatically detect and use the Rust extension when available. If not installed, it falls back to pure-Python rule matching with no code changes needed.
 
 ## Configuration
 
@@ -270,11 +293,19 @@ bbmd = ACLBBMD(config=config)
 +--------+---------+
          |
 +--------v---------+
-|   ACL BBMD       | <-- ACL Rules
-|  - Filtering     | <-- Prometheus Metrics
-|  - Forwarding    | <-- Cut-through
+|   ACL BBMD       | <-- ACL Rules + Prometheus Metrics
+|  - Filtering     |
+|  - Forwarding    |
+|  - Cut-through   |
 +--------+---------+
          |
++--------v---------+     +-------------------------+
+|  ACL Engine      |---->|  Rust ACL Engine (PyO3) |
+|  (Python bridge) |     |  - NPDU/APDU decode     |
+|                  |     |    (bacnet-encoding)     |
+|                  |     |  - u32 bitmask matching  |
++--------+---------+     +-------------------------+
+         |                  (fallback: pure Python)
 +--------v---------+
 |   BVLLCodec      |
 +--------+---------+
@@ -298,16 +329,26 @@ ace-acl-bbmd/
 │   ├── __init__.py
 │   ├── __main__.py      # CLI entry point
 │   ├── bbmd.py          # ACL BBMD implementation
-│   ├── acl_engine.py    # ACL rule engine
+│   ├── acl_engine.py    # ACL rule engine (Python + Rust bridge)
 │   ├── config.py        # Configuration management
 │   └── models/
 │       ├── acl.py       # ACL models
 │       └── metrics.py   # Metrics models
+├── rust/                # Rust ACL engine (PyO3 extension)
+│   ├── pyproject.toml   # maturin build config
+│   ├── Cargo.toml       # Rust dependencies
+│   └── src/
+│       ├── lib.rs       # PyO3 bindings
+│       ├── engine.rs    # Rule matching engine
+│       └── inspect.rs   # BACnet NPDU/APDU packet inspection
+├── benchmarks/
+│   └── bench_acl_engine.py  # Throughput benchmarks
 ├── config/
 │   ├── bbmd_config.yaml # Example BBMD config
 │   └── acl_example.yaml # Example ACL config
 ├── tests/
 │   ├── test_acl_models.py
+│   ├── test_acl_engine.py
 │   ├── test_metrics.py
 │   └── test_config.py
 └── pyproject.toml
@@ -324,6 +365,16 @@ uv run pytest --cov=ace_acl_bbmd
 
 # Run specific test
 uv run pytest tests/test_acl_models.py
+```
+
+### Running Benchmarks
+
+```bash
+# Basic benchmark (100 rules, 20% deny)
+uv run python -m benchmarks.bench_acl_engine --rules 100 --deny-pct 0.20
+
+# With scaling analysis across rule counts
+uv run python -m benchmarks.bench_acl_engine --rules 100 --deny-pct 0.20 --scaling
 ```
 
 ### Code Quality

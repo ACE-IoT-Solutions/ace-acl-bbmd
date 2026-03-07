@@ -31,6 +31,54 @@ from ace_acl_bbmd.models.acl import (
     TimeRange,
 )
 
+import struct
+
+def _build_npdu(
+    source_net: int | None = None,
+    source_mac: bytes = b"",
+    dest_net: int | None = None,
+    dest_mac: bytes = b"",
+    hop_count: int = 255,
+    apdu_payload: bytes = b"",
+) -> bytes:
+    """Build valid BACnet NPDU wire bytes for testing."""
+    control = 0x00
+    parts = [bytes([0x01])]  # version
+
+    if dest_net is not None:
+        control |= 0x20
+    if source_net is not None:
+        control |= 0x08
+
+    parts.append(bytes([control]))
+
+    if dest_net is not None:
+        parts.append(struct.pack(">H", dest_net))
+        parts.append(bytes([len(dest_mac)]))
+        parts.append(dest_mac)
+
+    if source_net is not None:
+        parts.append(struct.pack(">H", source_net))
+        parts.append(bytes([len(source_mac)]))
+        parts.append(source_mac)
+
+    if dest_net is not None:
+        parts.append(bytes([hop_count]))
+
+    parts.append(apdu_payload)
+    return b"".join(parts)
+
+
+# Common APDU payloads (just the header bytes)
+APDU_WHO_IS = bytes([0x10, 0x08])  # UnconfirmedRequest, WhoIs
+APDU_I_AM = bytes([0x10, 0x00])    # UnconfirmedRequest, IAm
+APDU_READ_PROPERTY = bytes([       # ConfirmedRequest, ReadProperty (minimal)
+    0x00,  # PDU type 0 = ConfirmedRequest, no seg
+    0x05,  # max-seg=0, max-apdu=5 (1476)
+    0x01,  # invoke-id
+    0x0C,  # service choice = ReadProperty (12)
+])
+
 
 class TestACLEngineBasicScenarios:
     """Test basic allow/deny scenarios."""
@@ -235,46 +283,39 @@ class TestACLEngineDeviceFiltering:
     """Test device-based filtering scenarios."""
 
     def test_source_device_filtering(self):
-        """Test filtering based on source BACnet device ID."""
+        """Test filtering based on source BACnet device ID (MAC byte)."""
         config = ACLConfig(
             rules=[
                 ACLRule(
-                    name="allow-controller-1234",
+                    name="allow-controller-42",
                     action=RuleAction.ALLOW,
                     priority=100,
-                    source_device=1234,
+                    source_device=42,
                 )
             ],
             default_action=RuleAction.DENY,
         )
-        
+
         engine = ACLEngine(config)
-        
-        # Mock packet with device info
+
         source = IPv4Address("192.168.1.10:47808")
         dest = IPv4Address("192.168.1.20:47808")
-        
-        # Create mock NPDU with source device
-        npdu = MagicMock()
-        npdu.npduSADR = MagicMock()
-        npdu.npduSADR.addrNet = 1
-        npdu.npduSADR.addrAddr = [1234]  # Device ID 1234
-        
-        with patch('ace_acl_bbmd.acl_engine.NPDU.decode', return_value=npdu):
-            allowed, rule_name, info = engine.check_packet(b"data", source, dest)
-            assert allowed is True
-            assert rule_name == "allow-controller-1234"
-            assert info.source_device == 1234
+
+        # NPDU with source address: SNET=1, SLEN=1, SADR=[42]
+        pdu = _build_npdu(source_net=1, source_mac=bytes([42]))
+        allowed, rule_name, info = engine.check_packet(pdu, source, dest)
+        assert allowed is True
+        assert rule_name == "allow-controller-42"
 
     def test_destination_device_filtering(self):
-        """Test filtering based on destination BACnet device ID."""
+        """Test filtering based on destination BACnet device ID (MAC byte)."""
         config = ACLConfig(
             rules=[
                 ACLRule(
                     name="protect-critical-device",
                     action=RuleAction.DENY,
                     priority=50,
-                    dest_device=9999,  # Critical device
+                    dest_device=99,
                 ),
                 ACLRule(
                     name="allow-other",
@@ -284,24 +325,17 @@ class TestACLEngineDeviceFiltering:
             ],
             default_action=RuleAction.DENY,
         )
-        
+
         engine = ACLEngine(config)
-        
+
         source = IPv4Address("192.168.1.10:47808")
         dest = IPv4Address("192.168.1.20:47808")
-        
-        # Test to critical device
-        npdu = MagicMock()
-        npdu.npduDADR = MagicMock()
-        npdu.npduDADR.addrNet = 1
-        npdu.npduDADR.addrAddr = [9999]  # Critical device
-        npdu.npduSADR = None
-        
-        with patch('ace_acl_bbmd.acl_engine.NPDU.decode', return_value=npdu):
-            allowed, rule_name, info = engine.check_packet(b"data", source, dest)
-            assert allowed is False
-            assert rule_name == "protect-critical-device"
-            assert info.dest_device == 9999
+
+        # NPDU with dest address: DNET=1, DLEN=1, DADR=[99]
+        pdu = _build_npdu(dest_net=1, dest_mac=bytes([99]))
+        allowed, rule_name, info = engine.check_packet(pdu, source, dest)
+        assert allowed is False
+        assert rule_name == "protect-critical-device"
 
     def test_device_to_device_communication(self):
         """Test rules for specific device-to-device communication."""
@@ -311,35 +345,33 @@ class TestACLEngineDeviceFiltering:
                     name="controller-to-sensor",
                     action=RuleAction.ALLOW,
                     priority=100,
-                    source_device=1000,  # Controller
-                    dest_device=2000,    # Sensor
+                    source_device=10,
+                    dest_device=20,
                 ),
                 ACLRule(
                     name="sensor-to-controller",
                     action=RuleAction.ALLOW,
                     priority=100,
-                    source_device=2000,  # Sensor
-                    dest_device=1000,    # Controller
+                    source_device=20,
+                    dest_device=10,
                 ),
             ],
             default_action=RuleAction.DENY,
         )
-        
+
         engine = ACLEngine(config)
-        
-        # Test controller to sensor
-        npdu = MagicMock()
-        npdu.npduSADR = MagicMock()
-        npdu.npduSADR.addrAddr = [1000]
-        npdu.npduDADR = MagicMock()
-        npdu.npduDADR.addrAddr = [2000]
-        
-        with patch('ace_acl_bbmd.acl_engine.NPDU.decode', return_value=npdu):
-            source = IPv4Address("192.168.1.10:47808")
-            dest = IPv4Address("192.168.1.20:47808")
-            allowed, rule_name, info = engine.check_packet(b"data", source, dest)
-            assert allowed is True
-            assert rule_name == "controller-to-sensor"
+
+        source = IPv4Address("192.168.1.10:47808")
+        dest = IPv4Address("192.168.1.20:47808")
+
+        # NPDU with SADR=[10], DADR=[20]
+        pdu = _build_npdu(
+            source_net=1, source_mac=bytes([10]),
+            dest_net=2, dest_mac=bytes([20]),
+        )
+        allowed, rule_name, info = engine.check_packet(pdu, source, dest)
+        assert allowed is True
+        assert rule_name == "controller-to-sensor"
 
 
 class TestACLEngineMessageTypeFiltering:
@@ -437,27 +469,16 @@ class TestACLEngineMessageTypeFiltering:
             ],
             default_action=RuleAction.DENY,
         )
-        
+
         engine = ACLEngine(config)
-        
-        # Mock NPDU with APDU data
-        npdu = MagicMock()
-        npdu.pduData = b"apdu_data"
-        npdu.npduSADR = None
-        npdu.npduDADR = None
-        
-        # Mock UnconfirmedRequestPDU with WHO_IS service
-        apdu = MagicMock(spec=UnconfirmedRequestPDU)
-        apdu.apduService = 8  # whoIs service choice value
-        
-        with patch('ace_acl_bbmd.acl_engine.NPDU.decode', return_value=npdu):
-            with patch('ace_acl_bbmd.acl_engine.APDU.decode', return_value=apdu):
-                source = IPv4Address("192.168.1.10:47808")
-                dest = None
-                allowed, rule_name, info = engine.check_packet(b"data", source, dest)
-                assert allowed is True
-                assert rule_name == "allow-who-is"
-                assert info.message_type == MessageType.WHO_IS.value
+
+        source = IPv4Address("192.168.1.10:47808")
+        # Real WhoIs NPDU: version=1, control=0x00, APDU=[0x10, 0x08]
+        pdu = _build_npdu(apdu_payload=APDU_WHO_IS)
+        allowed, rule_name, info = engine.check_packet(pdu, source, dest=None)
+        assert allowed is True
+        assert rule_name == "allow-who-is"
+        assert info.message_type == MessageType.WHO_IS.value
 
 
 class TestACLEngineTimeBasedRules:
@@ -607,7 +628,7 @@ class TestACLEnginePriorityOrdering:
                     name="emergency-override",
                     action=RuleAction.ALLOW,
                     priority=0,  # Highest priority
-                    source_device=911,
+                    source_device=99,
                 ),
                 ACLRule(
                     name="blacklist-attacker",
@@ -629,21 +650,17 @@ class TestACLEnginePriorityOrdering:
             ],
             default_action=RuleAction.DENY,
         )
-        
+
         engine = ACLEngine(config)
-        
-        # Test emergency device from blacklisted network (should be allowed)
-        npdu = MagicMock()
-        npdu.npduSADR = MagicMock()
-        npdu.npduSADR.addrAddr = [911]
-        npdu.npduDADR = None
-        
-        with patch('ace_acl_bbmd.acl_engine.NPDU.decode', return_value=npdu):
-            source = IPv4Address("10.0.0.50:47808")
-            dest = IPv4Address("192.168.1.10:47808")
-            allowed, rule_name, info = engine.check_packet(b"data", source, dest)
-            assert allowed is True
-            assert rule_name == "emergency-override"
+
+        source = IPv4Address("10.0.0.50:47808")
+        dest = IPv4Address("192.168.1.10:47808")
+
+        # NPDU with source device MAC byte = 99
+        pdu = _build_npdu(source_net=1, source_mac=bytes([99]))
+        allowed, rule_name, info = engine.check_packet(pdu, source, dest)
+        assert allowed is True
+        assert rule_name == "emergency-override"
 
 
 class TestACLEngineDefaultActions:
@@ -802,48 +819,43 @@ class TestACLEngineComplexScenarios:
                     name="specific-device-to-network",
                     action=RuleAction.ALLOW,
                     priority=100,
-                    source_device=1234,
+                    source_device=42,
                     dest_network=IPv4Network("192.168.10.0/24"),
                     message_types=[MessageType.READ_PROPERTY, MessageType.WRITE_PROPERTY],
                 ),
             ],
             default_action=RuleAction.DENY,
         )
-        
+
         engine = ACLEngine(config)
-        
-        # Create NPDU with device info
-        npdu = MagicMock()
-        npdu.npduSADR = MagicMock()
-        npdu.npduSADR.addrAddr = [1234]
-        npdu.npduDADR = None
-        
-        with patch('ace_acl_bbmd.acl_engine.NPDU.decode', return_value=npdu):
-            source = IPv4Address("10.0.0.10:47808")
-            
-            # Test matching all criteria
-            dest = IPv4Address("192.168.10.50:47808")
-            allowed, rule_name, info = engine.check_packet(
-                b"data", source, dest, bvll_type=MessageType.READ_PROPERTY.value
-            )
-            assert allowed is True
-            assert rule_name == "specific-device-to-network"
-            
-            # Test wrong destination network
-            dest = IPv4Address("192.168.20.50:47808")
-            allowed, rule_name, info = engine.check_packet(
-                b"data", source, dest, bvll_type=MessageType.READ_PROPERTY.value
-            )
-            assert allowed is False
-            assert rule_name == "default"
-            
-            # Test wrong message type
-            dest = IPv4Address("192.168.10.50:47808")
-            allowed, rule_name, info = engine.check_packet(
-                b"data", source, dest, bvll_type=MessageType.WHO_IS.value
-            )
-            assert allowed is False
-            assert rule_name == "default"
+
+        source = IPv4Address("10.0.0.10:47808")
+        # NPDU with SADR=[42]
+        pdu = _build_npdu(source_net=1, source_mac=bytes([42]))
+
+        # Test matching all criteria
+        dest = IPv4Address("192.168.10.50:47808")
+        allowed, rule_name, info = engine.check_packet(
+            pdu, source, dest, bvll_type=MessageType.READ_PROPERTY.value
+        )
+        assert allowed is True
+        assert rule_name == "specific-device-to-network"
+
+        # Test wrong destination network
+        dest = IPv4Address("192.168.20.50:47808")
+        allowed, rule_name, info = engine.check_packet(
+            pdu, source, dest, bvll_type=MessageType.READ_PROPERTY.value
+        )
+        assert allowed is False
+        assert rule_name == "default"
+
+        # Test wrong message type
+        dest = IPv4Address("192.168.10.50:47808")
+        allowed, rule_name, info = engine.check_packet(
+            pdu, source, dest, bvll_type=MessageType.WHO_IS.value
+        )
+        assert allowed is False
+        assert rule_name == "default"
 
     def test_broadcast_handling(self):
         """Test handling of broadcast messages."""

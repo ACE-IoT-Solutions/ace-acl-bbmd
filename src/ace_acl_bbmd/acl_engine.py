@@ -4,6 +4,10 @@ ACL Engine for BACnet Packet Filtering
 This module provides advanced packet inspection and filtering capabilities
 for BACnet messages, including deep packet inspection for application layer
 message types.
+
+Rule matching is delegated to a native Rust engine (ace_acl_engine) for
+high throughput.  Packet inspection (BACnet NPDU/APDU decoding) remains in
+Python since it depends on bacpypes3.
 """
 
 import logging
@@ -14,9 +18,35 @@ from bacpypes3.pdu import PDU, IPv4Address
 from bacpypes3.npdu import NPDU
 from bacpypes3.apdu import APDU, UnconfirmedRequestPDU, ConfirmedRequestPDU
 
-from .models.acl import ACLConfig, RuleAction, MessageType
+from .models.acl import ACLConfig, ACLRule, RuleAction, MessageType
 
 logger = logging.getLogger(__name__)
+
+try:
+    from ace_acl_engine import RustACLEngine, RustACLRule
+    _RUST_AVAILABLE = True
+    logger.info("Rust ACL engine loaded — using native rule matching")
+except ImportError:
+    _RUST_AVAILABLE = False
+    logger.warning("Rust ACL engine not available — falling back to Python rule matching")
+
+
+def _build_rust_engine(config: ACLConfig) -> "RustACLEngine":
+    """Build a RustACLEngine from a Python ACLConfig."""
+    rust_rules = []
+    for r in config.rules:
+        rust_rules.append(RustACLRule(
+            name=r.name,
+            action=r.action.value,
+            priority=r.priority,
+            source_network=str(r.source_network) if r.source_network else None,
+            dest_network=str(r.dest_network) if r.dest_network else None,
+            source_device=r.source_device,
+            dest_device=r.dest_device,
+            message_types=[mt.value for mt in r.message_types],
+            enabled=r.enabled,
+        ))
+    return RustACLEngine(rust_rules, default_action=config.default_action.value)
 
 
 class PacketInfo:
@@ -43,19 +73,28 @@ class ACLEngine:
     """
     Advanced ACL engine for BACnet packet filtering.
 
-    This engine provides deep packet inspection capabilities to extract
-    detailed information from BACnet packets for ACL rule matching.
+    Packet inspection (BACnet NPDU/APDU decoding) is done in Python.
+    Rule matching is delegated to a native Rust engine when available,
+    falling back to the pure-Python implementation otherwise.
     """
 
     def __init__(self, config: ACLConfig):
-        """
-        Initialize the ACL engine.
-
-        Args:
-            config: ACL configuration
-        """
         self.config = config
         self._rule_cache: Dict[str, Any] = {}
+        self._rust_engine: Optional["RustACLEngine"] = None
+        self._rules_by_name: Dict[str, ACLRule] = {}
+        self._rebuild_rust_engine()
+
+    def _rebuild_rust_engine(self) -> None:
+        """(Re)build the Rust engine and the name→rule lookup from current config."""
+        self._rules_by_name = {r.name: r for r in self.config.rules}
+        if _RUST_AVAILABLE:
+            try:
+                self._rust_engine = _build_rust_engine(self.config)
+                logger.debug("Rust ACL engine built with %d rules", len(self.config.rules))
+            except Exception as e:
+                logger.error("Failed to build Rust ACL engine, falling back to Python: %s", e)
+                self._rust_engine = None
 
     def inspect_packet(
         self, pdu_data: bytes, source: IPv4Address, dest: Optional[IPv4Address] = None
@@ -166,14 +205,38 @@ class ACLEngine:
         Returns:
             Tuple of (allowed, rule_name, packet_info)
         """
-        # Inspect packet
-        info = self.inspect_packet(pdu_data, source, dest)
+        # --- Fast path: Rust engine (NPDU decode + rule matching in Rust) ---
+        if self._rust_engine is not None:
+            src_str = str(source) if source else ""
+            dst_str = str(dest) if dest else None
 
-        # Override message type if BVLL type is provided
+            allowed, rule_name, detected_type = self._rust_engine.check_packet(
+                pdu_data,
+                src_str,
+                dst_str,
+                bvll_type,
+            )
+
+            # Build a minimal PacketInfo for callers that need it
+            info = PacketInfo()
+            info.source_addr = source
+            info.dest_addr = dest
+            info.is_broadcast = dest is None
+            info.packet_size = len(pdu_data)
+            info.message_type = bvll_type if bvll_type else detected_type
+
+            # Time-range check (not yet in Rust) — only for named rules
+            if rule_name != "default":
+                rule = self._rules_by_name.get(rule_name)
+                if rule and rule.time_range and not self._check_time_range(rule.time_range):
+                    allowed = self.config.default_action in (RuleAction.ALLOW, RuleAction.ALLOW_LOG)
+                    rule_name = "default"
+            return allowed, rule_name, info
+
+        # --- Fallback: pure Python ---
+        info = self.inspect_packet(pdu_data, source, dest)
         if bvll_type:
             info.message_type = bvll_type
-
-        # Find matching rule
         rule = self.config.find_matching_rule(
             source_addr=info.source_addr,
             dest_addr=info.dest_addr,
@@ -183,16 +246,13 @@ class ACLEngine:
         )
 
         if rule:
-            # Check time-based restrictions
             if rule.time_range and not self._check_time_range(rule.time_range):
-                # Time restriction not met, continue to next rule
                 rule = None
 
         if rule:
             allowed = rule.action in (RuleAction.ALLOW, RuleAction.ALLOW_LOG)
             return allowed, rule.name, info
 
-        # No rule matched, use default
         allowed = self.config.default_action in (RuleAction.ALLOW, RuleAction.ALLOW_LOG)
         return allowed, "default", info
 
@@ -242,7 +302,8 @@ class ACLEngine:
         old_rules = len(self.config.rules) if self.config else 0
         self.config = new_config
         self._rule_cache.clear()
-        
+        self._rebuild_rust_engine()
+
         new_rules = len(new_config.rules)
         logger.info(
             f"ACL configuration updated: {old_rules} -> {new_rules} rules, "
