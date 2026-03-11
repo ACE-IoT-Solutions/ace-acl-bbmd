@@ -142,9 +142,9 @@ class ACLBBMD(BIPBBMD):
         Returns:
             Tuple of (allowed, rule_name)
         """
-        # Get packet data
-        pdu_data = lpdu.encode() if hasattr(lpdu, 'encode') else b""
-        
+        # Get raw NPDU bytes from the LPDU payload
+        pdu_data = lpdu.pduData if hasattr(lpdu, 'pduData') and lpdu.pduData else b""
+
         # Use ACL engine to check packet
         allowed, rule_name, packet_info = self.acl_engine.check_packet(
             pdu_data=pdu_data,
@@ -152,7 +152,7 @@ class ACLBBMD(BIPBBMD):
             dest=dest_addr,
             bvll_type=message_type,
         )
-        
+
         # Record metrics
         self.metrics.record_packet(
             source_addr=source_addr,

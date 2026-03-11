@@ -74,6 +74,74 @@ cd ..
 
 The Python ACL engine will automatically detect and use the Rust extension when available. If not installed, it falls back to pure-Python rule matching with no code changes needed.
 
+### Docker
+
+The container image includes the Rust ACL engine pre-built. Pull from the GitHub Container Registry:
+
+```bash
+docker pull ghcr.io/ace-iot-solutions/ace-acl-bbmd:main
+```
+
+Run with environment variables:
+
+```bash
+docker run -d --name ace-bbmd \
+  --network host \
+  -e BBMD_ADDRESS="192.168.1.100/24:47808" \
+  -e BBMD_BDT_ENTRIES="192.168.1.101:47808,192.168.2.100:47808" \
+  -e BBMD_ACL_DEFAULT_ACTION=deny \
+  -e BBMD_METRICS_HTTP_ENABLED=true \
+  ghcr.io/ace-iot-solutions/ace-acl-bbmd:main
+```
+
+Or mount your own config and ACL rules files:
+
+```bash
+docker run -d --name ace-bbmd \
+  --network host \
+  -e BBMD_GENERATE_CONFIG=false \
+  -v /path/to/bbmd_config.yaml:/app/config/runtime.yaml:ro \
+  -v /path/to/acl_rules.yaml:/app/config/acl_rules.yaml:ro \
+  -e BBMD_ACL_RULES_FILE=/app/config/acl_rules.yaml \
+  ghcr.io/ace-iot-solutions/ace-acl-bbmd:main
+```
+
+### Container Environment Variables
+
+All configuration can be set via environment variables at container launch:
+
+| Variable | Default | Description |
+|---|---|---|
+| **Network** | | |
+| `BBMD_ADDRESS` | `0.0.0.0:47808` | BBMD listen address (IP/mask:port) |
+| `BBMD_INTERFACE` | _(none)_ | Network interface to bind to |
+| `BBMD_BDT_ENTRIES` | _(none)_ | Comma-separated peer BBMD addresses |
+| `BBMD_ACCEPT_FOREIGN_DEVICES` | `true` | Accept foreign device registrations |
+| `BBMD_MAX_FOREIGN_DEVICES` | `100` | Maximum foreign devices |
+| **Logging** | | |
+| `BBMD_LOG_LEVEL` | `INFO` | Log level (DEBUG, INFO, WARNING, ERROR) |
+| `BBMD_LOG_FILE` | _(none)_ | Log file path (logs to stdout if unset) |
+| **Metrics** | | |
+| `BBMD_ENABLE_METRICS` | `true` | Enable metrics collection |
+| `BBMD_METRICS_INTERVAL` | `60` | Metrics snapshot interval (seconds) |
+| `BBMD_METRICS_RETENTION` | `3600` | Metrics retention period (seconds) |
+| `BBMD_METRICS_HTTP_ENABLED` | `true` | Enable Prometheus HTTP endpoint |
+| `BBMD_METRICS_HTTP_PORT` | `9090` | Prometheus HTTP port |
+| `BBMD_METRICS_FILE_EXPORT_ENABLED` | `false` | Enable metrics file export |
+| `BBMD_METRICS_FILE_EXPORT_PATH` | `/app/metrics/bbmd_metrics.prom` | Metrics export file path |
+| `BBMD_METRICS_FILE_EXPORT_INTERVAL` | `60` | Metrics export interval (seconds) |
+| **Performance** | | |
+| `BBMD_MAX_PACKET_SIZE` | `1476` | Maximum BACnet packet size |
+| `BBMD_QUEUE_SIZE` | `1000` | Packet processing queue size |
+| **ACL** | | |
+| `BBMD_ACL_DEFAULT_ACTION` | `deny` | Default action (allow, deny, log, allow_log) |
+| `BBMD_ACL_LOG_DEFAULT` | `true` | Log packets hitting default action |
+| `BBMD_ACL_ENABLE_CUT_THROUGH` | `true` | Enable cut-through forwarding |
+| `BBMD_ACL_CUT_THROUGH_NETWORKS` | _(none)_ | Comma-separated trusted CIDRs |
+| `BBMD_ACL_RULES_FILE` | _(none)_ | Path to mounted ACL rules YAML file |
+| **Entrypoint** | | |
+| `BBMD_GENERATE_CONFIG` | `true` | Generate config from env vars (set `false` to use mounted file) |
+
 ## Configuration
 
 ### Basic Configuration (config/bbmd_config.yaml)
