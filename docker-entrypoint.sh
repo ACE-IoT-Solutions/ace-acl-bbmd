@@ -14,6 +14,14 @@ if [ ! -f "$CONFIG_FILE" ] || [ "${BBMD_GENERATE_CONFIG:-true}" = "true" ]; then
     BBMD_ACCEPT_FOREIGN_DEVICES="${BBMD_ACCEPT_FOREIGN_DEVICES:-true}"
     BBMD_MAX_FOREIGN_DEVICES="${BBMD_MAX_FOREIGN_DEVICES:-100}"
 
+    # ---- BACnet device identity ----
+    BBMD_DEVICE_INSTANCE="${BBMD_DEVICE_INSTANCE:-999}"
+    BBMD_DEVICE_NAME="${BBMD_DEVICE_NAME:-ACE-ACL-BBMD}"
+    BBMD_VENDOR_NAME="${BBMD_VENDOR_NAME:-ACE IoT Solutions}"
+    BBMD_VENDOR_IDENTIFIER="${BBMD_VENDOR_IDENTIFIER:-999}"
+    BBMD_MODEL_NAME="${BBMD_MODEL_NAME:-ACE ACL BBMD}"
+    BBMD_DESCRIPTION="${BBMD_DESCRIPTION:-ACL-enabled BACnet/IP Broadcast Management Device}"
+
     # ---- Logging ----
     BBMD_LOG_LEVEL="${BBMD_LOG_LEVEL:-INFO}"
     BBMD_LOG_FILE="${BBMD_LOG_FILE:-}"
@@ -42,6 +50,13 @@ if [ ! -f "$CONFIG_FILE" ] || [ "${BBMD_GENERATE_CONFIG:-true}" = "true" ]; then
     cat > "$CONFIG_FILE" <<YAML
 # Auto-generated from environment variables
 bbmd_address: "${BBMD_ADDRESS}"
+
+device_instance: ${BBMD_DEVICE_INSTANCE}
+device_name: "${BBMD_DEVICE_NAME}"
+vendor_name: "${BBMD_VENDOR_NAME}"
+vendor_identifier: ${BBMD_VENDOR_IDENTIFIER}
+model_name: "${BBMD_MODEL_NAME}"
+description: "${BBMD_DESCRIPTION}"
 YAML
 
     # Optional fields

@@ -118,6 +118,13 @@ All configuration can be set via environment variables at container launch:
 | `BBMD_BDT_ENTRIES` | _(none)_ | Comma-separated peer BBMD addresses |
 | `BBMD_ACCEPT_FOREIGN_DEVICES` | `true` | Accept foreign device registrations |
 | `BBMD_MAX_FOREIGN_DEVICES` | `100` | Maximum foreign devices |
+| **Device Identity** | | |
+| `BBMD_DEVICE_INSTANCE` | `999` | BACnet device instance (0-4194303, unique on network) |
+| `BBMD_DEVICE_NAME` | `ACE-ACL-BBMD` | BACnet device object name |
+| `BBMD_VENDOR_NAME` | `ACE IoT Solutions` | BACnet vendor name |
+| `BBMD_VENDOR_IDENTIFIER` | `999` | ASHRAE-registered vendor ID |
+| `BBMD_MODEL_NAME` | `ACE ACL BBMD` | BACnet model name |
+| `BBMD_DESCRIPTION` | _(see default)_ | BACnet device description |
 | **Logging** | | |
 | `BBMD_LOG_LEVEL` | `INFO` | Log level (DEBUG, INFO, WARNING, ERROR) |
 | `BBMD_LOG_FILE` | _(none)_ | Log file path (logs to stdout if unset) |
@@ -354,27 +361,29 @@ bbmd = ACLBBMD(config=config)
 
 ## Architecture
 
+The BBMD runs as a full BACnet device — it responds to Who-Is, ReadProperty, and
+other standard services — while also performing ACL-filtered broadcast forwarding.
+
 ```
-+------------------+
-|   Application    |
-|  (BACnet Stack)  |
-+--------+---------+
-         |
++------------------------------------+
+|  ACLBBMDApplication                |
+|  (full BACnet device services)     |
+|  - Who-Is / I-Am                   |
+|  - ReadProperty / WriteProperty    |
+|  - ReadPropertyMultiple            |
+|  - Who-Has / I-Have                |
+|  - Change of Value (COV)           |
++--------+---------------------------+
+         |  ASAP ↔ NSAP
 +--------v---------+
-|   ACL BBMD       | <-- ACL Rules + Prometheus Metrics
-|  - Filtering     |
-|  - Forwarding    |
-|  - Cut-through   |
-+--------+---------+
-         |
-+--------v---------+     +-------------------------+
-|  ACL Engine      |---->|  Rust ACL Engine (PyO3) |
-|  (Python bridge) |     |  - NPDU/APDU decode     |
-|                  |     |    (bacnet-encoding)     |
-|                  |     |  - u32 bitmask matching  |
-+--------+---------+     +-------------------------+
-         |                  (fallback: pure Python)
-+--------v---------+
+| ACLBBMDLinkLayer | <-- ACL Rules + Prometheus Metrics
+|  - Packet filter |
+|  - BDT/FDT mgmt |     +-------------------------+
+|  - Cut-through   |---->|  Rust ACL Engine (PyO3) |
+|  - Forwarding    |     |  - NPDU/APDU decode     |
++--------+---------+     |  - u32 bitmask matching |
+         |               +-------------------------+
++--------v---------+       (fallback: pure Python)
 |   BVLLCodec      |
 +--------+---------+
          |
@@ -396,8 +405,11 @@ ace-acl-bbmd/
 ├── src/ace_acl_bbmd/
 │   ├── __init__.py
 │   ├── __main__.py      # CLI entry point
-│   ├── bbmd.py          # ACL BBMD implementation
+│   ├── application.py   # Full BACnet Application with device services
+│   ├── link.py          # ACL BBMD link layer (codec/mux/server stack)
+│   ├── bbmd.py          # ACL BBMD BVLL handler
 │   ├── acl_engine.py    # ACL rule engine (Python + Rust bridge)
+│   ├── acl_reload.py    # Runtime ACL config reload (file watcher)
 │   ├── config.py        # Configuration management
 │   └── models/
 │       ├── acl.py       # ACL models

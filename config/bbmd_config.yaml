@@ -5,6 +5,14 @@
 bbmd_address: "0.0.0.0:47808"
 interface: "eth0"  # Optional: specific network interface
 
+# BACnet Device Identity
+device_instance: 999         # Unique on the BACnet network (0-4194303)
+device_name: "ACE-ACL-BBMD"
+vendor_name: "ACE IoT Solutions"
+vendor_identifier: 999       # ASHRAE-registered vendor ID
+model_name: "ACE ACL BBMD"
+description: "ACL-enabled BACnet/IP Broadcast Management Device"
+
 # Broadcast Distribution Table (peer BBMDs)
 bdt_entries:
   - "192.168.1.101:47808"

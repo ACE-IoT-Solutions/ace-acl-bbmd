@@ -36,6 +36,32 @@ class BBMDConfig(BaseModel):
         default=None, description="Network interface to bind to"
     )
 
+    # BACnet device identity
+    device_instance: int = Field(
+        default=999, ge=0, le=4194303,
+        description="BACnet device object instance number (unique on the network)",
+    )
+    device_name: str = Field(
+        default="ACE-ACL-BBMD",
+        description="BACnet device object name",
+    )
+    vendor_name: str = Field(
+        default="ACE IoT Solutions",
+        description="BACnet vendor name",
+    )
+    vendor_identifier: int = Field(
+        default=999,
+        description="BACnet vendor identifier (registered with ASHRAE)",
+    )
+    model_name: str = Field(
+        default="ACE ACL BBMD",
+        description="BACnet model name",
+    )
+    description: str = Field(
+        default="ACL-enabled BACnet/IP Broadcast Management Device",
+        description="BACnet device description",
+    )
+
     # BDT (Broadcast Distribution Table) - store as strings
     bdt_entries: List[str] = Field(
         default_factory=list, description="List of peer BBMD addresses"
