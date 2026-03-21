@@ -5,7 +5,7 @@ A BACnet/IP Broadcast Management Device with Access Control List functionality
 for filtering and controlling BACnet traffic.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 from .bbmd import ACLBBMD
 from .link import ACLBBMDLinkLayer

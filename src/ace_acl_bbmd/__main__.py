@@ -18,7 +18,6 @@ from bacpypes3.debugging import ModuleLogger
 from bacpypes3.basetypes import BDTEntry, IPMode
 from bacpypes3.local.device import DeviceObject
 from bacpypes3.local.networkport import NetworkPortObject
-from bacpypes3.pdu import IPv4Address
 
 from .application import ACLBBMDApplication
 from .config import ConfigLoader, BBMDConfig
@@ -59,7 +58,7 @@ def _build_objects(config: BBMDConfig):
     # Populate BDT
     bdt = []
     for addr_str in config.bdt_entries:
-        bdt.append(BDTEntry(IPv4Address(addr_str)))
+        bdt.append(BDTEntry(addr_str))
     network_port_object.bbmdBroadcastDistributionTable = bdt
 
     return [device_object, network_port_object]

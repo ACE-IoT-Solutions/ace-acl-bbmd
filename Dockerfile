@@ -20,22 +20,25 @@ RUN maturin build --release --out /build/wheels
 
 
 # ---------- Runtime stage ----------
-FROM python:3.13-slim
+FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim
 
 LABEL org.opencontainers.image.source="https://github.com/ACE-IoT-Solutions/ace-acl-bbmd"
 LABEL org.opencontainers.image.description="ACL-enabled BACnet/IP Broadcast Management Device"
 
 WORKDIR /app
 
-# Install the Python package
-COPY pyproject.toml README.md ./
+# Install the Python package using uv with lock file for reproducible builds
+COPY pyproject.toml uv.lock README.md ./
 COPY src/ ./src/
 
-RUN pip install --no-cache-dir .
+RUN uv sync --no-dev
 
 # Install the pre-built Rust extension wheel
 COPY --from=rust-builder /build/wheels/*.whl /tmp/
-RUN pip install --no-cache-dir /tmp/*.whl && rm -f /tmp/*.whl
+RUN uv pip install --no-cache /tmp/*.whl && rm -f /tmp/*.whl
+
+# Ensure venv binaries are on PATH for direct invocation
+ENV PATH="/app/.venv/bin:${PATH}"
 
 # Copy default config and entrypoint
 COPY config/ ./config/
