@@ -28,6 +28,8 @@ logger = logging.getLogger(__name__)
 class BBMDConfig(BaseModel):
     """Complete BBMD configuration."""
 
+    model_config = {"populate_by_name": True}
+
     # BBMD network settings - store as string for Pydantic compatibility
     bbmd_address: str = Field(
         ..., description="BBMD IP address and port (e.g., 192.168.1.10/24:47808)"
@@ -40,6 +42,7 @@ class BBMDConfig(BaseModel):
     device_instance: int = Field(
         default=999, ge=0, le=4194303,
         description="BACnet device object instance number (unique on the network)",
+        alias="device_id",
     )
     device_name: str = Field(
         default="ACE-ACL-BBMD",
