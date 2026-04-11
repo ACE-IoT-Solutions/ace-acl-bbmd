@@ -266,7 +266,7 @@ class ACLBBMD(BIPBBMD):
         if isinstance(lpdu, (OriginalBroadcastNPDU, DistributeBroadcastToNetwork)):
             cut_through = self._is_cut_through_eligible(source_addr)
             if cut_through:
-                # For cut-through, forward immediately then process
+                # For cut-through, forward immediately then deliver locally
                 logger.debug(f"Cut-through forwarding from {source_addr}")
                 self.metrics.record_packet(
                     source_addr=source_addr,
@@ -278,11 +278,19 @@ class ACLBBMD(BIPBBMD):
                     cut_through=True,
                 )
 
-                # Forward first (cut-through)
+                # Forward to BDT peers and foreign devices
                 await self._forward_broadcast(lpdu, source_addr)
 
-                # Then continue processing for metrics
-                await super().confirmation(lpdu)
+                # Deliver to local network layer only (skip super().confirmation()
+                # which would forward to peers again, causing duplicates)
+                if self.serverPeer:
+                    pdu = PDU(
+                        lpdu.pduData,
+                        source=lpdu.pduSource,
+                        destination=LocalBroadcast(),
+                        user_data=lpdu.pduUserData,
+                    )
+                    await self.response(pdu)
                 return
 
         # Apply ACL check
