@@ -11,7 +11,13 @@ from unittest.mock import MagicMock, patch, AsyncMock
 from ipaddress import IPv4Network
 
 from bacpypes3.pdu import IPv4Address
-from bacpypes3.ipv4.bvll import LPDU, OriginalUnicastNPDU, OriginalBroadcastNPDU
+from bacpypes3.ipv4.bvll import (
+    LPDU,
+    OriginalUnicastNPDU,
+    OriginalBroadcastNPDU,
+    ReadBroadcastDistributionTable,
+    ReadBroadcastDistributionTableAck,
+)
 
 from ace_acl_bbmd.bbmd import ACLBBMD
 from ace_acl_bbmd.models.acl import ACLConfig, ACLRule, RuleAction, MessageType
@@ -202,6 +208,36 @@ class TestBBMDIntegration:
             mock_forward.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_read_bdt_uses_acl_message_type_and_responds(self, config):
+        """A read_bdt ACL rule allows the request to reach the BBMD service."""
+        config.acl.rules.insert(
+            0,
+            ACLRule(
+                name="allow-bdt-read",
+                action=RuleAction.ALLOW,
+                priority=1,
+                source_network=IPv4Network("172.16.0.0/24"),
+                message_types=[MessageType.READ_BDT],
+            ),
+        )
+        bbmd = ACLBBMD(config=config)
+        request = ReadBroadcastDistributionTable(
+            source=IPv4Address("172.16.0.10:47808"),
+            destination=IPv4Address("192.168.1.1:47808"),
+        )
+
+        try:
+            with patch.object(bbmd, "request", new_callable=AsyncMock) as send:
+                await bbmd.confirmation(request)
+
+            send.assert_awaited_once()
+            assert isinstance(send.await_args.args[0], ReadBroadcastDistributionTableAck)
+            assert bbmd.metrics.get_snapshot().rule_hit_counts["allow-bdt-read"] == 1
+        finally:
+            if bbmd._cache_cleanup_handle:
+                bbmd._cache_cleanup_handle.cancel()
+
+    @pytest.mark.asyncio
     async def test_default_action(self, bbmd):
         """Test default action when no rules match."""
         # Traffic from unknown network should hit default deny
@@ -239,4 +275,3 @@ class TestBBMDIntegration:
         # All should be processed
         assert bbmd.metrics.get_snapshot().total_packets == 10
         assert bbmd.metrics.get_snapshot().packets_allowed == 10
-

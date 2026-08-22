@@ -6,25 +6,31 @@ functionality with metrics collection and cut-through forwarding optimization.
 """
 
 import asyncio
-from typing import Optional, Dict, Callable
+from typing import TYPE_CHECKING, Optional, Dict, Callable
 import logging
 
 from bacpypes3.debugging import bacpypes_debugging, ModuleLogger
 from bacpypes3.pdu import PDU, Address, LocalBroadcast, IPv4Address
 from bacpypes3.ipv4.service import BIPBBMD
 from bacpypes3.ipv4.bvll import (
+    DeleteForeignDeviceTableEntry,
     LPDU,
     ForwardedNPDU,
     OriginalBroadcastNPDU,
     OriginalUnicastNPDU,
     DistributeBroadcastToNetwork,
+    ReadBroadcastDistributionTable,
+    ReadForeignDeviceTable,
     RegisterForeignDevice,
     Result,
+    WriteBroadcastDistributionTable,
 )
-from bacpypes3.npdu import NPDU
 
 from .models.acl import ACLConfig, RuleAction
 from .models.metrics import MetricsCollector, MetricsConfig
+
+if TYPE_CHECKING:
+    from .config import BBMDConfig
 
 # Debugging
 _debug = 0
@@ -260,6 +266,14 @@ class ACLBBMD(BIPBBMD):
             message_type = "original_unicast"
         elif isinstance(lpdu, RegisterForeignDevice):
             message_type = "register_foreign_device"
+        elif isinstance(lpdu, ReadBroadcastDistributionTable):
+            message_type = "read_bdt"
+        elif isinstance(lpdu, WriteBroadcastDistributionTable):
+            message_type = "write_bdt"
+        elif isinstance(lpdu, ReadForeignDeviceTable):
+            message_type = "read_fdt"
+        elif isinstance(lpdu, DeleteForeignDeviceTableEntry):
+            message_type = "delete_fdt_entry"
 
         # Check cut-through eligibility for broadcast/forward operations
         cut_through = False
@@ -374,4 +388,3 @@ class ACLBBMD(BIPBBMD):
         self._cut_through_cache.clear()
         
         logger.info("BBMD ACL configuration updated")
-
